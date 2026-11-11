@@ -66,7 +66,11 @@ flowchart TD
 ```
 
 ## Screenshots
+## Screenshots
 
+Explore the complete application:
+
+[View Application Screenshots](SCREENSHOTS.md)
 Application screenshots belong in [`assets/screenshots/`](assets/screenshots/). Add your captured dashboard images there and link them below. The architecture infographic above is included already.
 
 <!-- Replace the placeholder below after adding your screenshot file. -->
