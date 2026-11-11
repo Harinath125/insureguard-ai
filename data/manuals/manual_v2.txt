@@ -1,0 +1,14 @@
+COMMERCIAL PROPERTY RATE MANUAL (SYNTHETIC)
+Version: v2
+Effective date: 2026-01-01
+
+Section 4. Premium rating
+
+4.1 Base rate. The base rate is 0.22% of the insured value.
+
+4.2 High-risk multiplier. Properties classified as high risk are rated with a multiplier of 1.40.
+Note 4.2. The high-risk multiplier does not apply to properties with an approved sprinkler system. Such properties are rated with the standard-risk multiplier.
+
+4.3 Standard-risk multiplier. All other properties are rated with a multiplier of 1.20.
+
+4.4 Deductible credit. A deductible above Rs 1,00,000 receives a credit factor of 0.95.

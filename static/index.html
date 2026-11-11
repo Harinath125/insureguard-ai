@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InsureGuard AI</title>
+<style>
+:root{--ink:#10252b;--mute:#4a6670;--teal:#0b4f5c;--teal2:#0b7285;--bg:#ffffff;--panel:#eaf3f4;--line:#d5e3e6;--amber:#f29e4c;--red:#b3261e;--green:#2f9e6e}
+@media (prefers-color-scheme:dark){:root{--ink:#e6f1f3;--mute:#9db8bf;--teal:#7cc4d1;--teal2:#5fb3c2;--bg:#0f1b1f;--panel:#16282d;--line:#27424a;--red:#ff8a80;--green:#6fcf9f}}
+*{box-sizing:border-box}
+body{margin:0;font-family:Calibri,Arial,sans-serif;color:var(--ink);background:var(--bg);font-size:15px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--line)}
+header h1{margin:0;font-size:20px;color:var(--teal)}
+header .sp{flex:1}
+select,button{font:inherit;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+button.primary{background:var(--teal2);color:#fff;border-color:var(--teal2);font-weight:700}
+button.small{padding:3px 9px;font-size:13px}
+button:disabled{opacity:.5;cursor:default}
+nav{display:flex;flex-wrap:wrap;gap:4px;padding:10px 20px 0;border-bottom:1px solid var(--line)}
+nav button{border:none;border-radius:8px 8px 0 0;background:transparent;color:var(--mute)}
+nav button.on{background:var(--panel);color:var(--teal);font-weight:700}
+main{padding:18px 20px 40px;max-width:1150px;margin:0 auto}
+h2{color:var(--teal);margin:22px 0 8px;font-size:18px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.card{background:var(--panel);border-radius:12px;padding:14px}
+.card .n{font-size:30px;font-weight:700;color:var(--teal)}
+.card .l{color:var(--mute);font-size:13px}
+table{width:100%;border-collapse:collapse;margin:6px 0 14px}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top;font-size:14px}
+th{background:var(--teal);color:#fff}
+@media (prefers-color-scheme:dark){th{color:#0f1b1f}}
+.tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:700;background:var(--panel)}
+.high{color:var(--red)}.medium{color:#a15c00}.low,.info{color:var(--mute)}
+.passed{color:var(--green);font-weight:700}.failed{color:var(--red);font-weight:700}.skipped{color:var(--mute);font-weight:700}
+.msg{padding:10px 14px;border-radius:10px;background:var(--panel);margin:10px 0}
+.msg.err{border-left:4px solid var(--red)}
+code{background:var(--panel);padding:1px 5px;border-radius:4px;font-size:13px}
+small{color:var(--mute)}
+.hidden{display:none}
+svg text{fill:var(--ink);font-size:12px}
+.empty{color:var(--mute);padding:24px 0}
+@media (max-width:640px){main{padding:12px}th,td{font-size:13px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>InsureGuard AI</h1>
+  <small>Understand the rules. Trace the impact. Validate every decision.</small>
+  <span class="sp"></span>
+  <label>Role
+    <select id="role" title="Roles are sent as a header: a demonstration of access control, not real sign-in">
+      <option>analyst</option><option>reviewer</option><option>viewer</option><option>admin</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="auto" checked> auto-approve confident rules (demo)</label>
+  <select id="engine"><option value="rating_v2">engine: rating_v2 (seeded defects)</option><option value="rating_v2_clean">engine: rating_v2_clean (control)</option></select>
+  <button class="primary" id="run">Run full pipeline</button>
+</header>
+<nav id="tabs"></nav>
+<main>
+  <div id="msg"></div>
+  <div id="view"></div>
+</main>
+<script>
+const TABS=["Overview","Policy impact","Rule archaeology","Underwriting drift","Rating assurance","Rules & approvals","Dependency graph","Findings","Audit"];
+let tab="Overview", data={};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const hdrs=()=>({"Content-Type":"application/json","X-Role":$("#role").value,"X-User":$("#role").value});
+async function api(path,opt={}){
+  const r=await fetch(path,{...opt,headers:{...hdrs(),...(opt.headers||{})}});
+  const body=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(body.detail||r.statusText);
+  return body;
+}
+function say(text,err){ $("#msg").innerHTML=text?`<div class="msg ${err?'err':''}">${esc(text)}</div>`:""; }
+async function load(){
+  try{
+    const [rep,rules,graph]=await Promise.all([api("/api/report"),api("/api/rules"),api("/api/graph")]);
+    data={rep,rules,graph};
+  }catch(e){ say(e.message,true); }
+  render();
+}
+function tabs(){
+  $("#tabs").innerHTML=TABS.map(t=>`<button class="${t===tab?'on':''}" data-t="${t}">${t}</button>`).join("");
+  $("#tabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;render();});
+}
+function render(){
+  tabs();
+  const r=data.rep;
+  if(!r||!r.scenario||!r.scenario.engine_under_test){ $("#view").innerHTML=`<div class="empty">No analysis yet. Click <b>Run full pipeline</b> to analyse the two synthetic rate manuals, the legacy rating engine and the underwriting cases.</div>`; return; }
+  const v={ "Overview":overview,"Policy impact":policy,"Rule archaeology":archaeology,"Underwriting drift":drift,
+    "Rating assurance":assurance,"Rules & approvals":rulesView,"Dependency graph":graphView,"Findings":findings,"Audit":audit }[tab];
+  $("#view").innerHTML=v(r); bind();
+}
+function sev(s){return `<span class="tag ${s}">${s}</span>`}
+function overview(r){
+  const s=r.summary, sc=r.scenario, sv=s.open_findings_by_severity||{}, t=s.tests||{};
+  return `<div class="cards">
+   <div class="card"><div class="n">${s.rule_changes}</div><div class="l">rule changes found in manual ${esc(sc.new_version)}</div></div>
+   <div class="card"><div class="n">${s.distinct_defects}</div><div class="l">distinct rating defects (reproducible)</div></div>
+   <div class="card"><div class="n">${t.passed??0}/${t.tests??0}</div><div class="l">property tests passed</div></div>
+   <div class="card"><div class="n">${s.drift_groups_flagged}</div><div class="l">underwriting groups to investigate</div></div>
+   <div class="card"><div class="n">${(sv.high||0)}</div><div class="l">open high-severity findings</div></div>
+   <div class="card"><div class="n">${r.pending_approvals.length}</div><div class="l">rules awaiting human approval</div></div>
+  </div>
+  <h2>Workflow</h2>
+  <p>Policy change → candidate rules → <b>approval</b> → code mapping → rating tests → reproducible finding → <b>human review</b> → report.</p>
+  <p>Engine under test: <code>${esc(sc.engine_under_test)}</code> against manual ${esc(sc.old_version)} → ${esc(sc.new_version)}.
+  <a href="/api/report.html" target="_blank">Open the assurance report</a> · <a href="/docs" target="_blank">API docs</a></p>
+  <h2>Top findings</h2>${findingsTable(r.findings.filter(f=>f.module!=="policy"&&f.severity!=="low").slice(0,8),false)}
+  <h2>Limitations</h2><ul>${r.limitations.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`;
+}
+function policy(r){
+  const p=r.policy, imp=r.impact||{};
+  return `<h2>What changed: manual ${esc(p.old_version)} (${esc(p.old_effective)}) → ${esc(p.new_version)} (${esc(p.new_effective)})</h2>
+  <table><tr><th>Rule</th><th>Change</th><th>Source</th><th>Review</th></tr>${p.rule_changes.filter(c=>c.change!=="unchanged").map(c=>
+    `<tr><td>${esc(c.summary)}</td><td>${esc(c.change)}</td><td>${esc(c.source_ref||"")}</td><td>${c.needs_review?"needs human interpretation":""}</td></tr>`).join("")}</table>
+  <h2>Clause differences</h2><table><tr><th>Clause</th><th>Change</th><th>Old</th><th>New</th></tr>${p.clause_changes.map(c=>
+    `<tr><td>${esc(c.ref)}</td><td>${esc(c.change)}</td><td>${esc(c.old||"")}</td><td>${esc(c.new||"")}</td></tr>`).join("")}</table>
+  <h2>Impact: what depends on these changes</h2>
+  <p><b>Rules:</b> ${(imp.affected_rules||[]).map(a=>`${esc(a.label)} <small>(${a.impact}${a.via?": "+esc(a.via):""})</small>`).join("; ")}</p>
+  <p><b>Functions to update:</b> ${(imp.functions||[]).map(f=>esc(f.label)+" <small>"+esc(f.note)+"</small>").join("; ")||"none"}</p>
+  <p><b>Rules with no implementation found:</b> ${(imp.unimplemented_rules||[]).map(esc).join(", ")||"none"}</p>
+  <p><b>Tests to re-run:</b> ${(imp.tests||[]).length} · <b>Historical case groups touched:</b> ${(imp.case_groups||[]).map(g=>esc(g.label)).join("; ")||"none"}</p>
+  <p><small>A 10% lower multiplier does not mean every premium falls 10%: caps, minimums and exceptions may apply. Tests decide.</small></p>`;
+}
+function archaeology(r){
+  const eng=r.scenario.engine_under_test, a=r.archaeology;
+  const block=(name,label)=>{ const s=a[name]; if(!s) return "";
+    const fs=r.findings.filter(f=>f.module==="archaeology"&&f.scope===name);
+    return `<h2>${label}: <code>${esc(s.file)}</code> against manual ${esc(s.manual_version)}</h2>
+    <table><tr><th>Function</th><th>Line</th><th>Rule found in code</th><th>Evidence</th></tr>${s.rules.map(x=>
+      `<tr><td>${esc(x.function)}()</td><td>${x.line}</td><td>${esc(x.plain_english)}<br><small>${x.key?esc(x.key):"not in manual"}</small></td><td><code>${esc(x.snippet)}</code></td></tr>`).join("")}</table>
+    ${findingsTable(fs,false)}`; };
+  return block(eng,"Engine under test")+block("rating_v1","Baseline (control)");
+}
+function drift(r){
+  const d=r.drift;
+  return `<p>${d.cases} cases · ${d.groups_compared} comparable groups · ${d.groups_with_different_decisions} with different decisions.
+  <b>Flags mean "investigate", not "wrong": an underwriter may have used information missing from the record.</b></p>
+  <h2>Flagged for review</h2>${d.flagged.map(f=>`<div class="card" style="margin-bottom:10px"><b>${esc(f.group)}</b><br>
+   ${f.size} comparable cases: ${esc(JSON.stringify(f.decision_counts))}. No reason recorded for: <b>${f.case_ids.map(esc).join(", ")}</b>.<br>
+   <small>${esc(f.pattern||"")}</small>
+   <table><tr><th>Case</th><th>Decision</th><th>Branch</th><th>Underwriter</th><th>Value (lakh)</th><th>Claims</th><th>Deductible</th></tr>${f.decisions.map(x=>`<tr><td>${esc(x.case_id)}</td><td>${esc(x.decision)}</td><td>${esc(x.branch)}</td><td>${esc(x.underwriter)}</td><td>${x.value_lakh}</td><td>${x.claims_5y}</td><td>${x.deductible.toLocaleString("en-IN")}</td></tr>`).join("")}</table></div>`).join("")||"<div class='empty'>None.</div>"}
+  <h2>Differences that are explained (not flagged)</h2>
+  <table><tr><th>Case</th><th>Group</th><th>Decision</th><th>Recorded reason</th></tr>${d.explained.map(x=>`<tr><td>${esc(x.case_id)}</td><td>${esc(x.group)}</td><td>${esc(x.decision)}</td><td>${esc(x.reason_code)}: ${esc(x.notes)}</td></tr>`).join("")}</table>`;
+}
+function assurance(r){
+  const a=r.assurance[r.scenario.engine_under_test];
+  if(!a) return "<div class='empty'>No assurance run.</div>";
+  return `<p>Tests use <b>approved rules only</b>: ${a.approved_rules_used.map(esc).join(", ")||"none"}. Engine runs in a separate sandboxed process. Counterexamples are minimised by Hypothesis, so each one is a reproducible input.</p>
+  <table><tr><th>Test</th><th>Type</th><th>Property</th><th>Result</th><th>Examples</th><th>Minimal counterexample</th></tr>${a.results.map(t=>
+   `<tr><td>${esc(t.test_id)}</td><td>${esc(t.category)}</td><td>${esc(t.property)}</td><td class="${t.status}">${t.status}</td><td>${t.examples}</td>
+    <td>${t.counterexample?`<code>${esc(JSON.stringify(t.counterexample))}</code><br><small>expected ${t.expected}, got ${t.actual}. ${esc(t.note||"")}</small>`:esc(t.note||"")}</td></tr>`).join("")}</table>
+  <h2>Distinct defects</h2>${a.defects.map(d=>`<div class="card" style="margin-bottom:10px"><b>${esc(d.function)}() · ${esc(d.rule_key)}</b><br>
+   ${d.code_location?`Code: <code>${esc(d.code_location.snippet)}</code> (line ${d.code_location.line})<br>`:""}
+   Failing tests: ${d.failing_tests.map(t=>esc(t.test_id)).join(", ")}<br>
+   ${d.illustrative_policy?`Illustration: a ${d.illustrative_policy.policy.value.toLocaleString("en-IN")} high-risk policy should cost ${d.illustrative_policy.correct_premium}, this function charges ${d.illustrative_policy.premium_from_this_function} (difference ${d.illustrative_policy.difference}).`:""}</div>`).join("")||"<div class='empty'>No defects found.</div>"}`;
+}
+function rulesView(r){
+  const reviewer=["reviewer","admin"].includes($("#role").value);
+  const off=data.rules.filter(x=>x.authority==="official");
+  return `<p>${reviewer?"You can approve or reject candidate rules.":"Switch the role to <b>reviewer</b> to approve or reject rules."} AI-suggested or extracted rules never become official on their own.</p>
+  <table><tr><th>Rule</th><th>Version</th><th>Condition → behaviour</th><th>Source</th><th>Confidence</th><th>Status</th><th></th></tr>${off.map(x=>
+   `<tr><td>${esc(x.name)}<br><small>${esc(x.id)}</small></td><td>${esc(x.version)}</td><td>${esc(x.condition)} → ${esc(x.expected_behavior)}</td><td>${esc(x.source_ref)}</td><td>${x.confidence}</td><td>${esc(x.status)}</td>
+    <td>${x.status==="candidate"?`<button class="small" data-rule="${esc(x.id)}" data-d="approve">Approve</button> <button class="small" data-rule="${esc(x.id)}" data-d="reject">Reject</button>`:""}</td></tr>`).join("")}</table>
+  <p><button class="primary" id="rerun">Re-run rating assurance with current approvals</button></p>
+  <h2>Implemented rules (found in code)</h2>
+  <table><tr><th>Where</th><th>Rule</th><th>Evidence</th></tr>${data.rules.filter(x=>x.authority==="implemented").map(x=>`<tr><td>${esc(x.source_ref)} ${esc(x.location)}</td><td>${esc(x.name)}</td><td><code>${esc(x.expected_behavior)}</code></td></tr>`).join("")}</table>`;
+}
+function graphView(){
+  const g=data.graph, cols={rule:0,function:1,test:2,case_group:2,other:2};
+  const nodes=g.nodes.filter(n=>n.kind!=="rule"||n.version!=="v1"||g.edges.some(e=>e.target===n.id));
+  const per={}, pos={}, colOf=n=>cols[n.kind]??2;
+  nodes.forEach(n=>{const c=colOf(n); per[c]=(per[c]||0); pos[n.id]={c,x:90+c*340,y:30+per[c]*26}; per[c]++;});
+  const h=Math.max(...Object.values(per))*26+60;
+  const col={IMPLEMENTED_BY:"#0b7285",VALIDATED_BY:"#2f9e6e",DEPENDS_ON:"#f29e4c",SUPERSEDES:"#9aa5a8",OBSERVED_IN:"#b3261e"};
+  let k=0;
+  const edges=g.edges.filter(e=>pos[e.source]&&pos[e.target]&&e.type!=="VALIDATED_BY").map(e=>{
+    const a=pos[e.source], b=pos[e.target], c=col[e.type];
+    if(a.c===b.c){ const x=a.x-14-(k++%3)*7; return `<path d="M${a.x-6},${a.y-4} C${x-30},${a.y-4} ${x-30},${b.y-4} ${b.x-6},${b.y-4}" fill="none" stroke="${c}" stroke-width="1.5"><title>${e.type}</title></path>`; }
+    return `<line x1="${a.x+250}" y1="${a.y-4}" x2="${b.x-6}" y2="${b.y-4}" stroke="${c}" stroke-width="1.5"><title>${e.type}</title></line>`; }).join("");
+  const labels=nodes.map(n=>`<text x="${pos[n.id].x}" y="${pos[n.id].y}">${esc((n.label||n.id).slice(0,60))}</text>`).join("");
+  return `<p>Rules (left), the functions that implement them (middle), tests and flagged case groups (right). Edges: ${Object.entries(col).map(([k,c])=>`<span style="color:${c}">■</span> ${k}`).join(" · ")}. ${g.edges.filter(e=>e.type==="VALIDATED_BY").length} VALIDATED_BY links (rule → test) are not drawn; see the Policy impact tab.</p>
+  <svg width="100%" viewBox="0 0 1120 ${h}" role="img" aria-label="Rule dependency graph">${edges}${labels}</svg>`;
+}
+function findingsTable(fs,withReview=true){
+  if(!fs.length) return "<div class='empty'>None.</div>";
+  const reviewer=["reviewer","admin"].includes($("#role").value);
+  return `<table><tr><th>Severity</th><th>Module</th><th>Finding</th><th>Status</th>${withReview?"<th></th>":""}</tr>${fs.map(f=>
+   `<tr><td>${sev(f.severity)}</td><td>${esc(f.module)}<br><small>${esc(f.scope||"")}</small></td><td>${esc(f.title)}<br><small>${esc(f.detail)}</small></td><td>${esc(f.status)}</td>
+   ${withReview?`<td>${reviewer&&f.status==="open"?`<button class="small" data-f="${f.id}" data-d="confirmed">Confirm</button> <button class="small" data-f="${f.id}" data-d="dismissed">Dismiss</button> <button class="small" data-f="${f.id}" data-d="investigating">Investigate</button>`:""}</td>`:""}</tr>`).join("")}</table>`;
+}
+function findings(r){ return findingsTable(r.findings.filter(f=>f.module!=="policy")); }
+function audit(r){ return `<table><tr><th>Time</th><th>Actor</th><th>Action</th><th>Detail</th></tr>${r.audit.map(a=>`<tr><td>${esc(a.ts)}</td><td>${esc(a.actor)}</td><td>${esc(a.action)}</td><td>${esc(a.detail)}</td></tr>`).join("")}</table>`; }
+function bind(){
+  document.querySelectorAll("[data-rule]").forEach(b=>b.onclick=async()=>{
+    try{ await api("/api/rules/"+encodeURIComponent(b.dataset.rule).replace(/%40/g,"@").replace(/%3A/g,":")+"/decision",{method:"POST",body:JSON.stringify({decision:b.dataset.d})}); say(`Rule ${b.dataset.d}d.`); await load(); }catch(e){ say(e.message,true); } });
+  document.querySelectorAll("[data-f]").forEach(b=>b.onclick=async()=>{
+    try{ await api(`/api/findings/${b.dataset.f}/review`,{method:"POST",body:JSON.stringify({decision:b.dataset.d})}); say("Review recorded."); await load(); }catch(e){ say(e.message,true); } });
+  const rr=$("#rerun"); if(rr) rr.onclick=async()=>{ rr.disabled=true; say("Running rating assurance…");
+    try{ const cfg=data.rep.scenario; await api("/api/assurance/run?engine="+cfg.engine_under_test,{method:"POST"}); say("Assurance re-run complete."); await load(); }catch(e){ say(e.message,true); } finally{ rr.disabled=false; } };
+}
+$("#run").onclick=async()=>{
+  $("#run").disabled=true; say("Running the pipeline: extracting rules, analysing code, comparing cases, generating tests…");
+  try{
+    const out=await api(`/api/pipeline/run?auto_approve=${$("#auto").checked}&engine=${$("#engine").value}`,{method:"POST"});
+    say(`Done. ${out.assurance.failed} failing tests, ${out.assurance.defects} distinct defects, ${out.drift} underwriting group(s) flagged, ${out.pending_review.length} rule(s) awaiting review.`);
+    await load();
+  }catch(e){ say(e.message,true); } finally{ $("#run").disabled=false; }
+};
+$("#role").onchange=render;
+load();
+</script>
+</body>
+</html>

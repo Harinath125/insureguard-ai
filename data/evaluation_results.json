@@ -1,0 +1,24 @@
+{
+  "seeded_defects": 2,
+  "detected_by_property_tests": 2,
+  "detected_by_static_analysis": 2,
+  "missed": [],
+  "false_positives_on_clean_engine": {
+    "property_failures": 0,
+    "static_rate_or_boundary_findings": 0
+  },
+  "unexpected_defects_on_seeded_engine": [],
+  "underwriting": {
+    "planted_inconsistent_cases": 3,
+    "flagged": [
+      "C-0010",
+      "C-0011",
+      "C-0012"
+    ],
+    "explained_case_wrongly_flagged": false,
+    "explained_cases_listed_as_explained": [
+      "C-0018"
+    ]
+  },
+  "property_tests_per_engine": 10
+}
